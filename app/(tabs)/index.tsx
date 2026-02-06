@@ -9,6 +9,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { askLLM } from "./services/ollama";
 
 type Occasion =
   | "Wedding"
@@ -37,6 +38,11 @@ export default function HomeScreen() {
   const [showOccasionModal, setShowOccasionModal] = useState(false);
   const [selectedOccasion, setSelectedOccasion] = useState<Occasion | null>(null);
   const [selectedPhotographer, setSelectedPhotographer] = useState<Photographer | null>(null);
+
+  // AI states
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiReply, setAiReply] = useState<string>("");
+  const [showAiModal, setShowAiModal] = useState(false);
 
   const occasions: Occasion[] = [
     "Wedding",
@@ -117,6 +123,34 @@ export default function HomeScreen() {
     } catch {}
   };
 
+  const askAiForRecommendation = async () => {
+    try {
+      if (!selectedOccasion || filteredPhotographers.length === 0) return;
+
+      setAiLoading(true);
+      setAiReply("");
+      setShowAiModal(true);
+
+      const prompt = `You are helping a user pick a photographer.
+Occasion: ${selectedOccasion}
+
+Here are available photographers (name, location, rating, starting price):
+${filteredPhotographers
+  .map((p) => `- ${p.name} (${p.location}), rating ${p.rating}, price ${p.startingPrice}, availability ${p.availability}, response ${p.responseTime}`)
+  .join("\n")}
+
+Pick the best 2 choices and explain why in 3-5 lines.
+Keep it short and practical.`;
+
+      const reply = await askLLM(prompt);
+      setAiReply(reply || "No response received.");
+    } catch {
+      setAiReply("Sorry, AI request failed. Please try again.");
+    } finally {
+      setAiLoading(false);
+    }
+  };
+
   const TopBar = () => {
     if (step === "HOME") return null;
 
@@ -182,6 +216,18 @@ export default function HomeScreen() {
             </Text>
           </View>
 
+          {/* AI button */}
+          <TouchableOpacity
+            style={[styles.primaryBtn, { marginTop: 10 }]}
+            onPress={askAiForRecommendation}
+            activeOpacity={0.85}
+            disabled={!selectedOccasion || filteredPhotographers.length === 0 || aiLoading}
+          >
+            <Text style={styles.primaryBtnText}>
+              {aiLoading ? "Asking AI..." : "Ask AI to recommend"}
+            </Text>
+          </TouchableOpacity>
+
           <FlatList
             data={filteredPhotographers}
             keyExtractor={(item) => item.id}
@@ -213,6 +259,7 @@ export default function HomeScreen() {
         </View>
       )}
 
+      {/* Occasion modal */}
       <Modal
         visible={showOccasionModal}
         animationType="slide"
@@ -250,6 +297,33 @@ export default function HomeScreen() {
         </Pressable>
       </Modal>
 
+      {/* AI modal */}
+      <Modal
+        visible={showAiModal}
+        animationType="fade"
+        transparent
+        onRequestClose={() => setShowAiModal(false)}
+      >
+        <Pressable style={styles.detailOverlay} onPress={() => setShowAiModal(false)}>
+          <Pressable style={styles.detailCard} onPress={() => {}}>
+            <Text style={styles.detailName}>AI Recommendation</Text>
+
+            <Text style={{ color: "#101828", fontWeight: "700", lineHeight: 20 }}>
+              {aiLoading ? "Thinking..." : aiReply || "No response yet."}
+            </Text>
+
+            <TouchableOpacity
+              style={styles.detailCloseBtn}
+              onPress={() => setShowAiModal(false)}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.detailCloseText}>Close</Text>
+            </TouchableOpacity>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      {/* Photographer details modal */}
       <Modal
         visible={!!selectedPhotographer}
         animationType="fade"
